@@ -1,0 +1,76 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUST_BACKTRACE: short
+  RUSTFLAGS: "-D warnings"
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup | Checkout
+        uses: actions/checkout@v3
+
+      - name: Setup | Dependencies
+        run: sudo apt-get install -y libtss2-dev
+
+      - name: Setup | Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Setup | Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build | Hygiene
+        run: |
+          cargo fmt  -- --check
+          cargo clippy --all-features -- -D clippy::all
+
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Setup | Checkout
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup | Tarpaulin
+        uses: jaxxstorm/action-install-gh-release@v1.9.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          repo: xd009642/tarpaulin
+
+      - name: Setup | Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Setup | Dependencies
+        run: |
+          sudo apt-get install -y libtss2-dev
+
+      - name: Setup | Cache
+        uses: Swatinem/rust-cache@v2
+
+      - name: Test | Run
+        env:
+          RUST_BACKTRACE: 1
+        run: |
+          cargo tarpaulin --no-dead-code --engine llvm --out xml --features multisig,solana -- --test-threads 1
+
+      - name: Test | Report
+        uses: codecov/codecov-action@v3
